@@ -1,0 +1,175 @@
+From 61b0f62df33fa9ac828f566c8b20589524c0e8c4 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Thu, 15 Aug 2013 09:54:31 +0200
+Subject: [PATCH 1/6] partly support socket activated services
+
+---
+ chkconfig.c      |  9 ++++++---
+ leveldb.c        | 26 ++++++++++++++++++++++++++
+ leveldb.h        |  1 +
+ po/chkconfig.pot | 24 ++++++++++++------------
+ 4 files changed, 45 insertions(+), 15 deletions(-)
+
+diff --git a/chkconfig.c b/chkconfig.c
+index ccdb225..6a1fc61 100644
+--- a/chkconfig.c
++++ b/chkconfig.c
+@@ -622,17 +622,20 @@ int setService(char * name, int type, int where, int state) {
+ }
+ 
+ void forwardSystemd(const char *name, int type, const char *verb) {
+-
++    int socket = 0;
+     if (type == TYPE_XINETD)
+         return;
+ 
+     if (!systemdIsInit())
+ 	return;
+ 
+-    if (isOverriddenBySystemd(name)) {
++    if (isOverriddenBySystemd(name) || (socket = isSocketActivatedBySystemd(name))) {
+         char *p;
+ 
+-        asprintf(&p, "%s.service", name);
++        if(!socket)
++                asprintf(&p, "%s.service", name);
++        else
++                asprintf(&p, "%s.socket", name);
+ 
+         fprintf(stderr, _("Note: Forwarding request to 'systemctl %s %s'.\n"),
+                 verb, p);
+diff --git a/leveldb.c b/leveldb.c
+index 77a1396..352076c 100644
+--- a/leveldb.c
++++ b/leveldb.c
+@@ -869,6 +869,32 @@ out:
+     return rc;
+ }
+ 
++int isSocketActivatedBySystemd(const char *service) {
++    char *p;
++    char *s;
++    int rc = 0;
++
++    asprintf(&p, SYSTEMD_SERVICE_PATH "/%s@.service", service);
++    asprintf(&s, SYSTEMD_SERVICE_PATH "/%s.socket", service);
++
++    if (access(p, F_OK) >= 0 && access(s, F_OK) >= 0) {
++        rc = 1;
++        goto out;
++    }
++    free(p);
++    free(s);
++
++    asprintf(&p, SYSTEMD_LOCAL_SERVICE_PATH "/%s@.service", service);
++    asprintf(&s, SYSTEMD_LOCAL_SERVICE_PATH "/%s.socket", service);
++    if (access(p, F_OK) >= 0 && access(s, F_OK) >= 0) {
++        rc = 1;
++    }
++out:
++    free(p);
++    free(s);
++    return rc;
++}
++
+ int isEnabledInSystemd(const char *service) {
+         char *c = NULL;
+         int r;
+diff --git a/leveldb.h b/leveldb.h
+index bfa281a..63ab99e 100644
+--- a/leveldb.h
++++ b/leveldb.h
+@@ -73,6 +73,7 @@ int systemdIsInit();
+ int systemdActive();
+ int isOverriddenBySystemd(const char *service);
+ int isEnabledInSystemd(const char *service);
++int isSocketActivatedBySystemd(const char *service);
+ 
+ void checkSystemdDependencies(struct service *s);
+ #endif
+diff --git a/po/chkconfig.pot b/po/chkconfig.pot
+index 7acfe8d..d174fdd 100644
+--- a/po/chkconfig.pot
++++ b/po/chkconfig.pot
+@@ -8,7 +8,7 @@ msgid ""
+ msgstr ""
+ "Project-Id-Version: PACKAGE VERSION\n"
+ "Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2013-07-31 17:00+0200\n"
++"POT-Creation-Date: 2013-08-08 17:07+0200\n"
+ "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+ "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+ "Language-Team: LANGUAGE <LL@li.org>\n"
+@@ -100,50 +100,50 @@ msgstr ""
+ msgid "You do not have enough privileges to perform this operation.\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:422 ../chkconfig.c:427 ../chkconfig.c:550
++#: ../chkconfig.c:421 ../chkconfig.c:426 ../chkconfig.c:549
+ msgid "on"
+ msgstr ""
+ 
+-#: ../chkconfig.c:422 ../chkconfig.c:427 ../chkconfig.c:550
++#: ../chkconfig.c:421 ../chkconfig.c:426 ../chkconfig.c:549
+ msgid "off"
+ msgstr ""
+ 
+-#: ../chkconfig.c:512
++#: ../chkconfig.c:511
+ #, c-format
+ msgid "xinetd based services:\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:514
++#: ../chkconfig.c:513
+ #, c-format
+ msgid "failed to open directory %s: %s\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:638
++#: ../chkconfig.c:640
+ #, c-format
+ msgid "Note: Forwarding request to 'systemctl %s %s'.\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:643
++#: ../chkconfig.c:645
+ #, c-format
+ msgid "Failed to forward service request to systemctl: %m\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:699
++#: ../chkconfig.c:701
+ #, c-format
+ msgid "%s version %s\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:711
++#: ../chkconfig.c:713
+ #, c-format
+ msgid "--type must be 'sysv' or 'xinetd'\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:718
++#: ../chkconfig.c:720
+ #, c-format
+ msgid "only one of --list, --add, --del, or --override may be specified\n"
+ msgstr ""
+ 
+-#: ../chkconfig.c:803
++#: ../chkconfig.c:805
+ #, c-format
+ msgid "only one runlevel may be specified for a chkconfig query\n"
+ msgstr ""
+@@ -212,7 +212,7 @@ msgstr ""
+ msgid "cannot determine current run level\n"
+ msgstr ""
+ 
+-#: ../leveldb.c:813
++#: ../leveldb.c:815
+ #, c-format
+ msgid "failed to make symlink %s: %s\n"
+ msgstr ""
+-- 
+1.8.3.1
+

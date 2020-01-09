@@ -1,0 +1,24 @@
+From c561ccf5aeff1c5bff59647d6cba919f0aa67824 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 16 Feb 2015 18:27:15 +0100
+Subject: [PATCH 3/6] leveldb: remove debug output
+
+---
+ leveldb.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/leveldb.c b/leveldb.c
+index 1af3a6f..f4e0f8f 100644
+--- a/leveldb.c
++++ b/leveldb.c
+@@ -865,7 +865,6 @@ int systemdIsInit() {
+     if (!path)
+         return 0;
+     base = basename(path);
+-    puts(base);
+     if (!base)
+         return 0;
+     if (strcmp(base,"systemd"))
+-- 
+1.8.3.1
+

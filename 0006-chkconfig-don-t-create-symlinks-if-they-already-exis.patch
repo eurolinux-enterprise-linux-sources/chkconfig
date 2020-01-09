@@ -1,0 +1,36 @@
+From a91b4d79c1890d19e0deff0a9e33dde5c45bdd9d Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Wed, 29 Apr 2015 14:41:00 +0200
+Subject: [PATCH 6/6] chkconfig: don't create symlinks if they already exist
+
+---
+ chkconfig.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/chkconfig.c b/chkconfig.c
+index 596ef8f..d334bf2 100644
+--- a/chkconfig.c
++++ b/chkconfig.c
+@@ -239,10 +239,16 @@ static int frobOneDependencies(struct service *s, struct service *servs, int num
+ 
+ 	if (target || ((s0 != s->sPriority) || (k0 != s->kPriority))) {
+ 		for (i = 0; i < 7; i++) {
+-			if (isConfigured(s->name, i, NULL, NULL)) {
++                        int priority;
++                        char type;
++			if (isConfigured(s->name, i, &priority, &type)) {
+ 				int on = isOn(s->name, i);
+-				delService(s->name, TYPE_INIT_D, i);
+-				doSetService(*s, i, on);
++                                int new_priority = on ? s->sPriority : s->kPriority;
++
++                                if (new_priority != priority || (on ? 'S' : 'K') != type) {
++                                        delService(s->name, TYPE_INIT_D, i);
++                                        doSetService(*s, i, on);
++                                }
+ 			} else if (target) {
+ 				delService(s->name, TYPE_INIT_D, i);
+ 				doSetService(*s, i, ((1<<i) & s->levels));
+-- 
+1.8.3.1
+

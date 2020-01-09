@@ -1,0 +1,25 @@
+From 793905c0ec22cf4ef19dfa3c6b3b692e5feab698 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Wed, 18 Feb 2015 12:23:22 +0100
+Subject: [PATCH 4/6] fix combination --type xinetd --list service
+
+---
+ chkconfig.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/chkconfig.c b/chkconfig.c
+index 6a1fc61..596ef8f 100644
+--- a/chkconfig.c
++++ b/chkconfig.c
+@@ -434,7 +434,7 @@ static int showServiceInfoByName(char * name, int type, int forgiving) {
+     int rc;
+     struct service s;
+ 
+-    if (systemdActive() && isOverriddenBySystemd(name)) {
++    if (systemdActive() && isOverriddenBySystemd(name) && !(type & TYPE_XINETD)) {
+         return forgiving ? 0 : 1;
+     }
+ 
+-- 
+1.8.3.1
+

@@ -1,0 +1,340 @@
+From 27d9eb3aa202772f57136bc67b30329fb4839b55 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Mon, 16 Feb 2015 17:36:13 +0100
+Subject: [PATCH 2/6] leveldb: restore selinux context for xinetd conf files
+
+---
+ Makefile         |  2 +-
+ leveldb.c        | 49 +++++++++++++++++++++++++++++++++----
+ po/chkconfig.pot | 74 ++++++++++++++++++++++++++++++++------------------------
+ 3 files changed, 87 insertions(+), 38 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 79e02da..cde8811 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,7 +2,7 @@ VERSION=$(shell awk '/Version:/ { print $$2 }' chkconfig.spec)
+ TAG = chkconfig-$(VERSION)
+ 
+ CFLAGS=-g -Wall $(RPM_OPT_FLAGS) -D_GNU_SOURCE
+-LDFLAGS+=-g
++LDFLAGS+=-g -lselinux -lsepol
+ MAN=chkconfig.8 ntsysv.8 alternatives.8
+ PROG=chkconfig
+ BINDIR = /sbin
+diff --git a/leveldb.c b/leveldb.c
+index 352076c..1af3a6f 100644
+--- a/leveldb.c
++++ b/leveldb.c
+@@ -27,6 +27,9 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <unistd.h>
++#include <selinux/selinux.h>
++#include <selinux/label.h>
++#include <libgen.h>
+ 
+ /* Changes
+    1998-09-22 - Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+@@ -38,6 +41,36 @@
+ 
+ #include "leveldb.h"
+ 
++int selinux_restore(const char *name) {
++        struct selabel_handle *hnd = NULL;
++        struct stat buf;
++        security_context_t newcon = NULL;
++        int r = -1;
++
++        hnd = selabel_open(SELABEL_CTX_FILE, NULL, 0);
++        if (hnd == NULL)
++                goto out;
++
++        r = stat(name, &buf);
++        if (r < 0)
++                goto out;
++
++        r = selabel_lookup_raw(hnd, &newcon, name, buf.st_mode);
++        if (r < 0)
++                goto out;
++
++        r = setfilecon_raw(name, newcon);
++        if (r < 0)
++                goto out;
++
++        r = 0;
++
++ out:
++        selabel_close(hnd);
++        freecon(newcon);
++        return r;
++}
++
+ int parseLevels(char * str, int emptyOk) {
+     char * chptr = str;
+     int rc = 0;
+@@ -744,6 +777,7 @@ int setXinetdService(struct service s, int on) {
+ 	char *buf, *ptr, *tmp;
+ 	struct stat sb;
+         mode_t mode;
++        int r;
+ 
+ 	if (on == -1) {
+ 		on = s.enabled ? 1 : 0;
+@@ -790,7 +824,11 @@ int setXinetdService(struct service s, int on) {
+ 	}
+ 	close(newfd);
+ 	unlink(oldfname);
+-	return(rename(newfname,oldfname));
++        r = rename(newfname,oldfname);
++        if (selinux_restore(oldfname) != 0)
++                fprintf(stderr, _("Unable to set selinux context for %s: %s\n"), oldfname,
++		strerror(errno));
++	return(r);
+ }
+ 
+ int doSetService(struct service s, int level, int on) {
+@@ -822,11 +860,12 @@ int doSetService(struct service s, int level, int on) {
+ 
+ int systemdIsInit() {
+     char *path = realpath("/sbin/init", NULL);
+-    char *base;
++    char *base = NULL;
+ 
+     if (!path)
+         return 0;
+     base = basename(path);
++    puts(base);
+     if (!base)
+         return 0;
+     if (strcmp(base,"systemd"))
+@@ -1218,10 +1257,10 @@ void checkSystemdDependencies(struct service *s) {
+                         }
+                 }
+         }
+-        
+-       
++
++
+ finish:
+-                
++
+         if(star) {
+                 for (i = 0; i < n_star; i++)
+                         free(star[i]);
+diff --git a/po/chkconfig.pot b/po/chkconfig.pot
+index d174fdd..2d44f2b 100644
+--- a/po/chkconfig.pot
++++ b/po/chkconfig.pot
+@@ -8,7 +8,7 @@ msgid ""
+ msgstr ""
+ "Project-Id-Version: PACKAGE VERSION\n"
+ "Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2013-08-08 17:07+0200\n"
++"POT-Creation-Date: 2015-02-16 17:34+0100\n"
+ "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+ "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+ "Language-Team: LANGUAGE <LL@li.org>\n"
+@@ -197,22 +197,27 @@ msgstr ""
+ msgid "No services may be managed by ntsysv!\n"
+ msgstr ""
+ 
+-#: ../leveldb.c:263
++#: ../leveldb.c:296
+ #, c-format
+ msgid "failed to open %s/init.d: %s\n"
+ msgstr ""
+ 
+-#: ../leveldb.c:673
++#: ../leveldb.c:706
+ #, c-format
+ msgid "failed to glob pattern %s: %s\n"
+ msgstr ""
+ 
+-#: ../leveldb.c:716
++#: ../leveldb.c:749
+ #, c-format
+ msgid "cannot determine current run level\n"
+ msgstr ""
+ 
+-#: ../leveldb.c:815
++#: ../leveldb.c:829
++#, c-format
++msgid "Unable to set selinux context for %s: %s\n"
++msgstr ""
++
++#: ../leveldb.c:853
+ #, c-format
+ msgid "failed to make symlink %s: %s\n"
+ msgstr ""
+@@ -375,135 +380,140 @@ msgstr ""
+ msgid "would remove %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:383 ../alternatives.c:390 ../alternatives.c:422
++#: ../alternatives.c:383 ../alternatives.c:390 ../alternatives.c:423
+ #, c-format
+ msgid "failed to remove link %s: %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:406 ../alternatives.c:419
++#: ../alternatives.c:405 ../alternatives.c:420
+ #, c-format
+ msgid "would link %s -> %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:411 ../alternatives.c:428
++#: ../alternatives.c:410 ../alternatives.c:429
+ #, c-format
+ msgid "failed to link %s -> %s: %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:460
++#: ../alternatives.c:416
++#, c-format
++msgid "failed to link %s -> %s: %s exists and it is not a symlink\n"
++msgstr ""
++
++#: ../alternatives.c:461
+ #, c-format
+ msgid "%s already exists\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:462
++#: ../alternatives.c:463
+ #, c-format
+ msgid "failed to create %s: %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:493
++#: ../alternatives.c:494
+ #, c-format
+ msgid "failed to replace %s with %s: %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:519 ../alternatives.c:525 ../alternatives.c:536
+-#: ../alternatives.c:542
++#: ../alternatives.c:520 ../alternatives.c:526 ../alternatives.c:537
++#: ../alternatives.c:543
+ #, c-format
+ msgid "running %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:571
++#: ../alternatives.c:572
+ #, c-format
+ msgid "the primary link for %s must be %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:651
++#: ../alternatives.c:652
+ #, c-format
+ msgid "link %s incorrect for slave %s (%s %s)\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:692
++#: ../alternatives.c:693
+ #, c-format
+ msgid "%s - status is auto.\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:694
++#: ../alternatives.c:695
+ #, c-format
+ msgid "%s - status is manual.\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:696
++#: ../alternatives.c:697
+ #, c-format
+ msgid " link currently points to %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:699
++#: ../alternatives.c:700
+ #, c-format
+ msgid "%s - priority %d\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:702
++#: ../alternatives.c:703
+ #, c-format
+ msgid " slave %s: %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:707
++#: ../alternatives.c:708
+ #, c-format
+ msgid "Current `best' version is %s.\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:737
++#: ../alternatives.c:738
+ #, c-format
+ msgid "There is %d program that provides '%s'.\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:737
++#: ../alternatives.c:738
+ #, c-format
+ msgid "There are %d programs which provide '%s'.\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:739
++#: ../alternatives.c:740
+ #, c-format
+ msgid "  Selection    Command\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:748
++#: ../alternatives.c:749
+ #, c-format
+ msgid "Enter to keep the current selection[+], or type selection number: "
+ msgstr ""
+ 
+-#: ../alternatives.c:751
++#: ../alternatives.c:752
+ #, c-format
+ msgid ""
+ "\n"
+ "error reading choice\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:778 ../alternatives.c:804
++#: ../alternatives.c:779 ../alternatives.c:805
+ #, c-format
+ msgid "%s has not been configured as an alternative for %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:820
++#: ../alternatives.c:821
+ #, c-format
+ msgid "(would remove %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:822
++#: ../alternatives.c:823
+ #, c-format
+ msgid "failed to remove %s: %s\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:973
++#: ../alternatives.c:974
+ #, c-format
+ msgid "altdir %s invalid\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:979
++#: ../alternatives.c:980
+ #, c-format
+ msgid "admindir %s invalid\n"
+ msgstr ""
+ 
+-#: ../alternatives.c:989
++#: ../alternatives.c:990
+ #, c-format
+ msgid "alternatives version %s\n"
+ msgstr ""
+-- 
+1.8.3.1
+
