@@ -84,6 +84,8 @@ static int delService(char *name, int type, int level) {
 
     if (LSB && level == -1) {
 	numservs = readServices(&services);
+	if (numservs < 0)
+	    return 1;
 
 	for (i = 0; i < numservs ; i++) {
 		if (services[i].startDeps) {
@@ -212,10 +214,16 @@ static int frobOneDependencies(struct service *s, struct service *servs, int num
 
 	if (target || ((s0 != s->sPriority) || (k0 != s->kPriority))) {
 		for (i = 0; i < 7; i++) {
-			if (isConfigured(s->name, i, NULL, NULL)) {
+                        int priority;
+                        char type;
+			if (isConfigured(s->name, i, &priority, &type)) {
 				int on = isOn(s->name, i);
-				delService(s->name, TYPE_INIT_D, i);
-				doSetService(*s, i, on);
+                                int new_priority = on ? s->sPriority : s->kPriority;
+
+                                if (new_priority != priority || (on ? 'S' : 'K') != type) {
+                                        delService(s->name, TYPE_INIT_D, i);
+                                        doSetService(*s, i, on);
+                                }
 			} else if (target) {
 				delService(s->name, TYPE_INIT_D, i);
 				doSetService(*s, i, ((1<<i) & s->levels));
@@ -236,6 +244,8 @@ static int frobDependencies(struct service *s) {
 	int i;
 
 	numservs = readServices(&servs);
+        if (numservs < 0)
+                return 1;
         /* In the full service list, replace the target script's current
            runlevels with the desired output runlevels, which are passed in */
 	for (i = 0; i < numservs; i++) {
@@ -453,7 +463,9 @@ static int listService(char * item, int type) {
 
     if (type & TYPE_INIT_D) {
         numServices = readServices(&services);
-    
+        if (numServices < 0)
+                return 1;
+
         qsort(services, numServices, sizeof(*services), serviceNameCmp);
 	
         for (i = 0; i < numServices ; i++) {
@@ -518,7 +530,7 @@ int setService(char * name, int type, int where, int state) {
     int what;
     struct service s;
     
-    if (!where && state != -1) {
+    if (!where && state != -1 && state != -2) {
 	/* levels 2, 3, 4, 5 */
 	where = (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
     } else if (!where) {
