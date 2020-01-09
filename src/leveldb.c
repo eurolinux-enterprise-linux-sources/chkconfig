@@ -27,6 +27,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <selinux/selinux.h>
+#include <selinux/label.h>
+#include <libgen.h>
 
 /* Changes
    1998-09-22 - Arnaldo Carvalho de Melo <acme@conectiva.com.br>
@@ -37,6 +40,47 @@
 #define _(String) gettext((String))
 
 #include "leveldb.h"
+
+int selinux_restore(const char *name) {
+        struct selabel_handle *hnd = NULL;
+        struct stat buf;
+        security_context_t newcon = NULL;
+        int r = -1;
+
+        hnd = selabel_open(SELABEL_CTX_FILE, NULL, 0);
+        if (hnd == NULL)
+                goto out;
+
+        r = stat(name, &buf);
+        if (r < 0)
+                goto out;
+
+        r = selabel_lookup_raw(hnd, &newcon, name, buf.st_mode);
+        if (r < 0)
+                goto out;
+
+        r = setfilecon_raw(name, newcon);
+        if (r < 0)
+                goto out;
+
+        r = 0;
+
+ out:
+        if (hnd)
+                selabel_close(hnd);
+        if (newcon)
+                freecon(newcon);
+
+        /* Lets ignore any errors when selinux is disabled.
+         * We still want to run the previous code though,
+         * since we only need selinux policy.
+         * Selinux itself can be turned off.
+         */
+        if (!is_selinux_enabled())
+                 return 0;
+
+        return r;
+}
 
 int parseLevels(char * str, int emptyOk) {
     char * chptr = str;
@@ -744,6 +788,7 @@ int setXinetdService(struct service s, int on) {
 	char *buf, *ptr, *tmp;
 	struct stat sb;
         mode_t mode;
+        int r;
 
 	if (on == -1) {
 		on = s.enabled ? 1 : 0;
@@ -790,7 +835,11 @@ int setXinetdService(struct service s, int on) {
 	}
 	close(newfd);
 	unlink(oldfname);
-	return(rename(newfname,oldfname));
+        r = rename(newfname,oldfname);
+        if (selinux_restore(oldfname) != 0)
+                fprintf(stderr, _("Unable to set selinux context for %s: %s\n"), oldfname,
+		strerror(errno));
+	return(r);
 }
 
 int doSetService(struct service s, int level, int on) {
@@ -822,7 +871,7 @@ int doSetService(struct service s, int level, int on) {
 
 int systemdIsInit() {
     char *path = realpath("/sbin/init", NULL);
-    char *base;
+    char *base = NULL;
 
     if (!path)
         return 0;
@@ -866,6 +915,32 @@ int isOverriddenBySystemd(const char *service) {
     }
 out:
     free(p);
+    return rc;
+}
+
+int isSocketActivatedBySystemd(const char *service) {
+    char *p;
+    char *s;
+    int rc = 0;
+
+    asprintf(&p, SYSTEMD_SERVICE_PATH "/%s@.service", service);
+    asprintf(&s, SYSTEMD_SERVICE_PATH "/%s.socket", service);
+
+    if (access(p, F_OK) >= 0 && access(s, F_OK) >= 0) {
+        rc = 1;
+        goto out;
+    }
+    free(p);
+    free(s);
+
+    asprintf(&p, SYSTEMD_LOCAL_SERVICE_PATH "/%s@.service", service);
+    asprintf(&s, SYSTEMD_LOCAL_SERVICE_PATH "/%s.socket", service);
+    if (access(p, F_OK) >= 0 && access(s, F_OK) >= 0) {
+        rc = 1;
+    }
+out:
+    free(p);
+    free(s);
     return rc;
 }
 
@@ -1074,6 +1149,13 @@ int unitGetReverseDeps(char *unit, char ***deps, int *n_deps) {
                 ret = tt;
                 ret[n_ret] = NULL;
 
+		/* trim leading whitespaces */
+		while ((c = fgetc(sys)) != EOF) {
+			if (!isspace(c) || c == '\n') {
+				ungetc(c, sys);
+				break;
+			}
+		}
                 for (j = 0; (c = fgetc(sys)) != EOF && c != '\n'; j++) {
                         t = realloc(ret[n_ret], j + 2);
                         if (t == NULL) {
@@ -1192,10 +1274,10 @@ void checkSystemdDependencies(struct service *s) {
                         }
                 }
         }
-        
-       
+
+
 finish:
-                
+
         if(star) {
                 for (i = 0; i < n_star; i++)
                         free(star[i]);

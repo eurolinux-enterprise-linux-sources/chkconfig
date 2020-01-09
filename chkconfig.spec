@@ -1,20 +1,14 @@
 Summary: A system tool for maintaining the /etc/rc*.d hierarchy
 Name: chkconfig
-Version: 1.3.61
-Release: 5%{?dist}.1
+Version: 1.7.2
+Release: 1%{?dist}
 License: GPLv2
 Group: System Environment/Base
+URL: https://git.fedorahosted.org/git/chkconfig.git
 Source: http://fedorahosted.org/releases/c/h/chkconfig/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires: newt-devel gettext popt-devel libselinux-devel
 Conflicts: initscripts <= 5.30-1
-Patch0: 0001-partly-support-socket-activated-services.patch
-Patch1: 0002-leveldb-restore-selinux-context-for-xinetd-conf-file.patch
-Patch2: 0003-leveldb-remove-debug-output.patch
-Patch3: 0004-fix-combination-type-xinetd-list-service.patch
-Patch4: 0005-Makefile-fix-wrongly-behaving-LDFLAGS.patch
-Patch5: 0006-chkconfig-don-t-create-symlinks-if-they-already-exis.patch
-Patch6: 0001-chkconfig-use-isXinetdEnabled-instead-of-isOn.patch
 
 %description
 Chkconfig is a basic system utility.  It updates and queries runlevel
@@ -37,17 +31,11 @@ page), ntsysv configures the current runlevel (5 if you're using X).
 %prep
 %setup -q
 
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-
 %build
-
 make RPM_OPT_FLAGS="$RPM_OPT_FLAGS" LDFLAGS="$RPM_LD_FLAGS" %{?_smp_mflags}
+
+%check
+make check
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -68,7 +56,8 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -f %{name}.lang
 %defattr(-,root,root)
-%doc COPYING
+%{!?_licensedir:%global license %%doc}
+%license COPYING
 %dir /etc/alternatives
 /sbin/chkconfig
 %{_sbindir}/update-alternatives
@@ -83,6 +72,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/chkconfig*
 %{_mandir}/*/update-alternatives*
 %{_mandir}/*/alternatives*
+%{_prefix}/lib/systemd/systemd-sysv-install
 
 %files -n ntsysv
 %defattr(-,root,root)
@@ -90,22 +80,45 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/ntsysv.8*
 
 %changelog
-* Fri Apr 29 2016 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.61-5.1
-- chkconfig: use isXinetdEnabled instead of isOn
+* Wed Jun 29 2016 Lukáš Nykrýn <lnykryn@redhat.com> - 1.7.2-1
+- alternatives: introduce --keep-missing
+- alternatives: allow family in --set and display it in --config
 
-* Thu Apr 30 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.61-5
-- chkconfig: don't create symlinks if they already exist
+* Fri Jun 17 2016 Lukáš Nykrýn <lnykryn@redhat.com> - 1.7.1-1
+- merge the upstream with rhel branch
+- remove the preset change
+
+* Tue Nov 24 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.7-1
+- leveldb: fix segfault when selinux policy is not present
+- alternatives: add family option
+
+* Fri Oct 02 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.6-1
+- systemd-sysv-install: don't play ping-pong with systemctl
+- ntsysv: add description to systemd services
+- ntsysv: skip templates
+- Makefile: fix typo
+
+* Mon Jun 01 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.5-1
+- add systemd-sysv-install alias
+- don't create symlinks if they already exist
+- fix wrongly behaving LDFLAGS
+
+* Thu Mar 26 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.4-1
+- ntsysv: show systemd services and sockets
 - fix combination --type xinetd --list service
 - leveldb: restore selinux context for xinetd conf files
+- alternatives: remove unused variable
+- alternatives: warn if the target is not a symlink
+- spec: add link to git
+- lets simplify version
 
-* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 1.3.61-4
-- Mass rebuild 2014-01-24
+* Wed Nov 05 2014 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.63-1
+- alternatives: during install don't call preset on enabled services
 
-* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 1.3.61-3
-- Mass rebuild 2013-12-27
-
-* Mon Aug 26 2013 Lukas Nykryn <lnykryn@redhat.com> - 1.3.61-2
-- partly support socket activated services (#908683)
+* Tue Aug 12 2014 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.62-1
+- use systemctl preset, not systemctl enable
+- fix typo in manpage
+- partly support socket activated services
 
 * Wed Jul 31 2013 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.61-1
 - try to make install_initd work

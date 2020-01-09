@@ -43,6 +43,8 @@ static void usage(char *name) {
     fprintf(stderr, "\n");
     if (!strcmp(name,"install_initd") || !strcmp(name,"remove_initd")) {
         fprintf(stderr, _("usage:   %s [name]\n"), progname);
+    } else if (!strcmp(name,"systemd-sysv-install")) {
+        fprintf(stderr, _("usage:   %s <enable|disable|is-enabled> [name] \n"), progname);
     } else {
     fprintf(stderr, _("usage:   %s [--list] [--type <type>] [name]\n"), progname);
     fprintf(stderr, _("         %s --add <name>\n"), progname);
@@ -239,10 +241,16 @@ static int frobOneDependencies(struct service *s, struct service *servs, int num
 
 	if (target || ((s0 != s->sPriority) || (k0 != s->kPriority))) {
 		for (i = 0; i < 7; i++) {
-			if (isConfigured(s->name, i, NULL, NULL)) {
+                        int priority;
+                        char type;
+			if (isConfigured(s->name, i, &priority, &type)) {
 				int on = isOn(s->name, i);
-				delService(s->name, TYPE_INIT_D, i);
-				doSetService(*s, i, on);
+                                int new_priority = on ? s->sPriority : s->kPriority;
+
+                                if (new_priority != priority || (on ? 'S' : 'K') != type) {
+                                        delService(s->name, TYPE_INIT_D, i);
+                                        doSetService(*s, i, on);
+                                }
 			} else if (target) {
 				delService(s->name, TYPE_INIT_D, i);
 				doSetService(*s, i, ((1<<i) & s->levels));
@@ -434,7 +442,7 @@ static int showServiceInfoByName(char * name, int type, int forgiving) {
     int rc;
     struct service s;
 
-    if (systemdActive() && isOverriddenBySystemd(name)) {
+    if (systemdActive() && isOverriddenBySystemd(name) && !(type & TYPE_XINETD)) {
         return forgiving ? 0 : 1;
     }
 
@@ -559,7 +567,7 @@ int setService(char * name, int type, int where, int state) {
     int what;
     struct service s;
 
-    if (!where && state != -1) {
+    if (!where && state != -1 && state != -2) {
 	/* levels 2, 3, 4, 5 */
 	where = (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
     } else if (!where) {
@@ -622,17 +630,20 @@ int setService(char * name, int type, int where, int state) {
 }
 
 void forwardSystemd(const char *name, int type, const char *verb) {
-
+    int socket = 0;
     if (type == TYPE_XINETD)
         return;
 
     if (!systemdIsInit())
 	return;
 
-    if (isOverriddenBySystemd(name)) {
+    if (isOverriddenBySystemd(name) || (socket = isSocketActivatedBySystemd(name))) {
         char *p;
 
-        asprintf(&p, "%s.service", name);
+        if(!socket)
+                asprintf(&p, "%s.service", name);
+        else
+                asprintf(&p, "%s.socket", name);
 
         fprintf(stderr, _("Note: Forwarding request to 'systemctl %s %s'.\n"),
                 verb, p);
@@ -765,13 +776,36 @@ int main(int argc, const char ** argv) {
 	display_list_systemd_note();
 
 	return listService(item, type);
-    } else if (argc == 1) {
+    } else if (argc == 1 && strcmp(progname, "systemd-sysv-install")) {
         display_list_systemd_note();
         return listService(NULL, type);
     } else {
 	char * name = (char *)poptGetArg(optCon);
 	char * state = (char *)poptGetArg(optCon);
 	int where = 0, level = -1;
+
+        if (!strcmp(progname, "systemd-sysv-install")) {
+                char *c;
+                if (!name || !state)
+                        usage(progname);
+
+                noRedirectItem = 1;
+
+                /* systemd-sysv-install has target and verb in reverse order */
+                c = name;
+                name = state;
+
+                if (!strcmp(c, "enable"))
+                        state = "on";
+                else if (!strcmp(c, "disable"))
+                        state = "off";
+                else if (!strcmp(c, "is-enabled")) {
+                        state = NULL;
+                        where = 1 << 5;
+                }
+                else
+                        usage(progname);
+        }
 
 	if (!name) {
 		usage(progname);
@@ -808,7 +842,7 @@ int main(int argc, const char ** argv) {
 	    if (rc)
 	       return 1;
 	    if (s.type == TYPE_XINETD) {
-	       if (isOn("xinetd",level))
+	       if (isXinetdEnabled())
 		       return !s.levels;
 	       else
 		       return 1;
