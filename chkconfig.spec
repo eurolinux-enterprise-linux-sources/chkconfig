@@ -1,7 +1,7 @@
 Summary: A system tool for maintaining the /etc/rc*.d hierarchy
 Name: chkconfig
 Version: 1.3.61
-Release: 5%{?dist}
+Release: 5%{?dist}.1
 License: GPLv2
 Group: System Environment/Base
 Source: http://fedorahosted.org/releases/c/h/chkconfig/%{name}-%{version}.tar.bz2
@@ -14,6 +14,7 @@ Patch2: 0003-leveldb-remove-debug-output.patch
 Patch3: 0004-fix-combination-type-xinetd-list-service.patch
 Patch4: 0005-Makefile-fix-wrongly-behaving-LDFLAGS.patch
 Patch5: 0006-chkconfig-don-t-create-symlinks-if-they-already-exis.patch
+Patch6: 0001-chkconfig-use-isXinetdEnabled-instead-of-isOn.patch
 
 %description
 Chkconfig is a basic system utility.  It updates and queries runlevel
@@ -42,6 +43,7 @@ page), ntsysv configures the current runlevel (5 if you're using X).
 %patch3 -p1
 %patch4 -p1
 %patch5 -p1
+%patch6 -p1
 
 %build
 
@@ -88,6 +90,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/ntsysv.8*
 
 %changelog
+* Fri Apr 29 2016 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.61-5.1
+- chkconfig: use isXinetdEnabled instead of isOn
+
 * Thu Apr 30 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.61-5
 - chkconfig: don't create symlinks if they already exist
 - fix combination --type xinetd --list service

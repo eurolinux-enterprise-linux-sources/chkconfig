@@ -1,0 +1,25 @@
+From a10b9542afeacb6c6bd8dcf2ad82cca005d28aa9 Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Thu, 28 Apr 2016 15:03:19 +0200
+Subject: [PATCH] chkconfig: use isXinetdEnabled instead of isOn
+
+---
+ chkconfig.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/chkconfig.c b/chkconfig.c
+index d334bf2..30e110a 100644
+--- a/chkconfig.c
++++ b/chkconfig.c
+@@ -817,7 +817,7 @@ int main(int argc, const char ** argv) {
+ 	    if (rc)
+ 	       return 1;
+ 	    if (s.type == TYPE_XINETD) {
+-	       if (isOn("xinetd",level))
++	       if (isXinetdEnabled())
+ 		       return !s.levels;
+ 	       else
+ 		       return 1;
+-- 
+2.4.3
+
