@@ -1,7 +1,7 @@
 Summary: A system tool for maintaining the /etc/rc*.d hierarchy
 Name: chkconfig
 Version: 1.7.2
-Release: 1%{?dist}
+Release: 1%{?dist}.1
 License: GPLv2
 Group: System Environment/Base
 URL: https://git.fedorahosted.org/git/chkconfig.git
@@ -79,7 +79,15 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/ntsysv
 %{_mandir}/*/ntsysv.8*
 
+%triggerin -- chkconfig < 1.7
+for i in  /var/lib/alternatives/* ; do
+    sed -i -e 's/^@.*@\([0-9]*\)$/\1/' $i
+done
+
 %changelog
+* Fri May 05 2017 Lukáš Nykrýn <lnykryn@redhat.com> - 1.7.2-1.1
+- spec: make possible to downgrade to pre-family versions
+
 * Wed Jun 29 2016 Lukáš Nykrýn <lnykryn@redhat.com> - 1.7.2-1
 - alternatives: introduce --keep-missing
 - alternatives: allow family in --set and display it in --config
