@@ -1,13 +1,15 @@
 Summary: A system tool for maintaining the /etc/rc*.d hierarchy
 Name: chkconfig
 Version: 1.3.49.3
-Release: 2%{?dist}
+Release: 2%{?dist}.1
 License: GPLv2
 Group: System Environment/Base
 Source: http://fedorahosted.org/releases/c/h/chkconfig/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires: newt-devel gettext popt-devel
 Conflicts: initscripts <= 5.30-1
+
+Patch0: 0001-chkconfig-correctly-handle-unreadable-init.d-bhubbar.patch
 
 %description
 Chkconfig is a basic system utility.  It updates and queries runlevel
@@ -29,6 +31,7 @@ page), ntsysv configures the current runlevel (5 if you're using X).
 
 %prep
 %setup -q
+%patch0 -p1
 
 %build
 
@@ -74,6 +77,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/ntsysv.8*
 
 %changelog
+* Thu Sep 12 2013 Lukas Nykryn <lnykryn@redhat.com> - 1.3.49.3-2.1
+- check readServices return value (#905555)
+
 * Wed Feb  1 2012 Bill Nottingham <notting@redhat.com> 1.3.49.3-2
 - fix another regression, this one in 'install_initd' (#696305)
 
