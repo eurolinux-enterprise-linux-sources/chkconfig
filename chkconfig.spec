@@ -1,7 +1,7 @@
 Summary: A system tool for maintaining the /etc/rc*.d hierarchy
 Name: chkconfig
 Version: 1.3.49.3
-Release: 5%{?dist}
+Release: 5%{?dist}.2
 License: GPLv2
 Group: System Environment/Base
 Source: http://fedorahosted.org/releases/c/h/chkconfig/%{name}-%{version}.tar.bz2
@@ -12,6 +12,8 @@ Conflicts: initscripts <= 5.30-1
 Patch0: 0001-chkconfig-correctly-handle-unreadable-init.d-bhubbar.patch
 Patch1: 0001-fix-permission-issues-with-xinetd-services.patch
 Patch2: 0001-leveldb-restore-selinux-context-for-xinetd-conf-file.patch
+Patch3: 0001-leveldb-fix-segfault-when-selinux-policy-is-not-pres.patch
+Patch4: 0001-leveldb-suppress-error-messages-when-selinux-is-turn.patch
 
 %description
 Chkconfig is a basic system utility.  It updates and queries runlevel
@@ -36,6 +38,8 @@ page), ntsysv configures the current runlevel (5 if you're using X).
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
+%patch4 -p1
 
 %build
 
@@ -81,6 +85,12 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/*/ntsysv.8*
 
 %changelog
+* Thu Jan 07 2016 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.49.3-5.2
+- leveldb: suppress error messages when selinux is turned off
+
+* Fri Dec 25 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.49.3-5.1
+- leveldb: fix segfault when selinux policy is not present
+
 * Tue Feb 17 2015 Lukáš Nykrýn <lnykryn@redhat.com> - 1.3.49.3-5
 - relabel xinetd.d files after change
 

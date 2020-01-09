@@ -1,0 +1,29 @@
+From d0130953d4c53d3b5531e6ad425a2debcfeb6f3e Mon Sep 17 00:00:00 2001
+From: Lukas Nykryn <lnykryn@redhat.com>
+Date: Fri, 30 Oct 2015 14:13:07 +0100
+Subject: [PATCH] leveldb: fix segfault when selinux policy is not present
+
+---
+ leveldb.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/leveldb.c b/leveldb.c
+index b33ab8e..a2c0d59 100644
+--- a/leveldb.c
++++ b/leveldb.c
+@@ -65,8 +65,10 @@ int selinux_restore(const char *name) {
+         r = 0;
+ 
+  out:
+-        selabel_close(hnd);
+-        freecon(newcon);
++        if (hnd)
++                selabel_close(hnd);
++        if (newcon)
++                freecon(newcon);
+         return r;
+ }
+ 
+-- 
+2.4.3
+
